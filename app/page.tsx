@@ -1,11 +1,14 @@
 'use client';
 import Image from "next/image";
 import { useState } from 'react';
-
+type TimelineItem = {
+  date: string;
+  event: string;
+};
 export default function Home() {
   const [query, setQuery] = useState('');
   const [summary, setSummary] = useState('');
-  const [timeline, setTimeline] = useState([]);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [bias, setBias] = useState({ Left: [], Center: [], Right: [] });
   const [loading, setLoading] = useState(false);
   const handleSearch = async () => {
