@@ -6,7 +6,7 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [summary, setSummary] = useState('');
   const [timeline, setTimeline] = useState([]);
-  const [bias, setBias] = useState(null);
+  const [bias, setBias] = useState({ Left: [], Center: [], Right: [] });
   const [loading, setLoading] = useState(false);
   const handleSearch = async () => {
     setLoading(true); // Show loading message
