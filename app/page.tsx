@@ -1,74 +1,126 @@
 'use client';
 import Image from "next/image";
 import { useState } from 'react';
+
 type TimelineItem = {
   date: string;
   event: string;
 };
+
+type BiasMap = {
+  Left: string[];
+  Center: string[];
+  Right: string[];
+};
+
+function coerceTimeline(items: unknown): TimelineItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((x: any): TimelineItem => ({
+    date: String(x?.date ?? ''),
+    event: String(x?.event ?? ''),
+  })).filter(it => it.date !== '' || it.event !== '');
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [summary, setSummary] = useState('');
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-  const [bias, setBias] = useState({ Left: [], Center: [], Right: [] });
+  const [bias, setBias] = useState<BiasMap>({ Left: [], Center: [], Right: [] });
   const [loading, setLoading] = useState(false);
+
   const handleSearch = async () => {
-    setLoading(true); // Show loading message
+    setLoading(true);
 
-    // IMPORTANT: Make sure your FastAPI backend is running!
-    // This is the address of your local backend server.
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-    // We need to encode the query to make it safe for a URL
-    const encodedQuery = encodeURIComponent(query);
-
-    // Fetch the summary for the first article found
-    const headlinesRes = await fetch(`${backendUrl}/everything?topic=${encodedQuery}`);
-    const headlinesData = await headlinesRes.json();
-
-    if (headlinesData.articles && headlinesData.articles.length > 0) {
-      const firstArticleUrl = encodeURIComponent(headlinesData.articles[0].url);
-
-      const summaryRes = await fetch(`${backendUrl}/summarize?article=${firstArticleUrl}`);
-      const summaryData = await summaryRes.json();
-      setSummary(summaryData.summary);
+    if (!backendUrl) {
+      console.error('Missing NEXT_PUBLIC_BACKEND_URL');
+      setSummary('Backend URL not configured. Please set NEXT_PUBLIC_BACKEND_URL.');
+      setLoading(false);
+      return;
     }
 
-    // Fetch the timeline
-    const timelineRes = await fetch(`${backendUrl}/timeline?topic=${encodedQuery}`);
-    const timelineData = await timelineRes.json();
-    // We need to parse the timeline string into a JSON object
-    setTimeline(JSON.parse(timelineData.timeline).timeline);
+    try {
+      const encodedQuery = encodeURIComponent(query);
 
-    // Fetch the bias map
-    const biasRes = await fetch(`${backendUrl}/bias?topic=${encodedQuery}`);
-    const biasData = await biasRes.json();
-    setBias(biasData);
+      // 1) Headlines → Summary
+      const headlinesRes = await fetch(`${backendUrl}/everything?topic=${encodedQuery}`);
+      const headlinesData = await headlinesRes.json().catch(() => ({} as any));
 
-    setLoading(false); // Hide loading message
+      if (Array.isArray(headlinesData?.articles) && headlinesData.articles.length > 0) {
+        const firstArticleUrl = encodeURIComponent(headlinesData.articles[0]?.url ?? '');
+        if (firstArticleUrl) {
+          const summaryRes = await fetch(`${backendUrl}/summarize?article=${firstArticleUrl}`);
+          const summaryData = await summaryRes.json().catch(() => ({} as any));
+          if (typeof summaryData?.summary === 'string') {
+            setSummary(summaryData.summary);
+          } else {
+            setSummary('No summary available.');
+          }
+        }
+      } else {
+        setSummary('No articles found for this topic.');
+      }
+
+      // 2) Timeline
+      const timelineRes = await fetch(`${backendUrl}/timeline?topic=${encodedQuery}`);
+      const timelineData = await timelineRes.json().catch(() => ({} as any));
+      // backend returns: { timeline: "<json-string>" }  OR similar
+      const parsed = (() => {
+        try {
+          const raw = typeof timelineData?.timeline === 'string'
+            ? JSON.parse(timelineData.timeline)
+            : timelineData?.timeline; // support if backend already sends an object
+          return coerceTimeline(raw?.timeline ?? raw);
+        } catch {
+          return [] as TimelineItem[];
+        }
+      })();
+      setTimeline(parsed);
+
+      // 3) Bias Map
+      const biasRes = await fetch(`${backendUrl}/bias?topic=${encodedQuery}`);
+      const biasData = await biasRes.json().catch(() => ({} as any));
+
+      const nextBias: BiasMap = {
+        Left: Array.isArray(biasData?.Left) ? biasData.Left.map(String) : [],
+        Center: Array.isArray(biasData?.Center) ? biasData.Center.map(String) : [],
+        Right: Array.isArray(biasData?.Right) ? biasData.Right.map(String) : [],
+      };
+      setBias(nextBias);
+    } catch (err) {
+      console.error(err);
+      setSummary('Something went wrong while generating the report.');
+      setTimeline([]);
+      setBias({ Left: [], Center: [], Right: [] });
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
         <h1 className="text-3xl font-bold mb-4">News AI</h1>
+
         <div className="flex w-full max-w-2xl">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask about a news topic..."
-              className="flex-grow p-3 bg-gray-700 text-white rounded-l-lg focus:outline-none"
-            />
-            <button 
-              onClick={handleSearch}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-r-lg">
-              Search
-            </button>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ask about a news topic..."
+            className="flex-grow p-3 bg-gray-700 text-white rounded-l-lg focus:outline-none"
+          />
+          <button
+            onClick={handleSearch}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-r-lg"
+          >
+            Search
+          </button>
         </div>
+
         <div className="mt-8 w-full max-w-2xl space-y-8">
-          {/* Show loading message */}
           {loading && <p className="text-center text-gray-400">Generating your AI report...</p>}
 
-          {/* Show Summary */}
           {summary && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Digest</h2>
@@ -76,8 +128,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Show Bias Map */}
-          {bias && (
+          {(bias.Left.length + bias.Center.length + bias.Right.length) > 0 && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Bias Map</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -103,8 +154,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Show Timeline */}
-          {timeline && timeline.length > 0 && (
+          {timeline.length > 0 && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Timeline</h2>
               <ul className="space-y-2">
@@ -117,8 +167,13 @@ export default function Home() {
               </ul>
             </div>
           )}
+
+          {(!loading && !summary && timeline.length === 0) && (
+            <p className="text-sm text-gray-500">Try searching for a topic to generate your report.</p>
+          )}
         </div>
       </main>
+
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
         <a
           className="flex items-center gap-2 hover:underline hover:underline-offset-4"
@@ -126,13 +181,7 @@ export default function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/file.svg" alt="File icon" width={16} height={16} />
           Learn
         </a>
         <a
@@ -141,13 +190,7 @@ export default function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/window.svg" alt="Window icon" width={16} height={16} />
           Examples
         </a>
         <a
@@ -156,13 +199,7 @@ export default function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
+          <Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
           Go to nextjs.org →
         </a>
       </footer>
