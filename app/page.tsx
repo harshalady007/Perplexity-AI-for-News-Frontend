@@ -24,6 +24,7 @@ function coerceTimeline(items: unknown): TimelineItem[] {
 }
 
 export default function Home() {
+  // --- FIXED: Removed quotes around "query" ---
   const [query, setQuery] = useState('');
   const [summary, setSummary] = useState('');
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -121,12 +122,14 @@ export default function Home() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Ask about a news topic..."
             className="flex-grow p-3 bg-gray-700 text-white rounded-l-lg focus:outline-none"
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }} // Optional: Add Enter key support
           />
           <button
             onClick={handleSearch}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-r-lg"
+            disabled={loading} // Optional: Disable button while loading
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold p-3 rounded-r-lg"
           >
-            Search
+            {loading ? 'Searching...' : 'Search'}
           </button>
         </div>
 
@@ -140,7 +143,7 @@ export default function Home() {
             </div>
           )}
 
-          {(bias.Left.length + bias.Center.length + bias.Right.length) > 0 && (
+          {(bias.Left.length > 0 || bias.Center.length > 0 || bias.Right.length > 0) && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Bias Map</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -166,31 +169,22 @@ export default function Home() {
             </div>
           )}
 
-          {/* Show Timeline */}
-          {Array.isArray(timeline) && (timeline as TimelineItem[]).length > 0 && (
+          {/* Show Timeline - Simplified rendering */}
+          {timeline.length > 0 && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Timeline</h2>
-
-              {/*
-                Create a typed local so TS never infers `never[]`
-              */}
-              {(() => {
-                const tl: TimelineItem[] = (timeline as TimelineItem[]) ?? [];
-                return (
-                  <ul className="space-y-2">
-                    {tl.map((item: TimelineItem, i: number) => (
-                      <li key={i} className="text-sm">
-                        <strong className="text-gray-300">{item.date}:</strong>
-                        <span className="ml-2 text-gray-400">{item.event}</span>
-                      </li>
-                    ))}
-                  </ul>
-                );
-              })()}
+              <ul className="space-y-2">
+                {timeline.map((item, i) => (
+                  <li key={i} className="text-sm">
+                    <strong className="text-gray-300">{item.date}:</strong>
+                    <span className="ml-2 text-gray-400">{item.event}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          {(!loading && !summary && timeline.length === 0) && (
+          {(!loading && !summary && timeline.length === 0 && bias.Left.length === 0 && bias.Center.length === 0 && bias.Right.length === 0) && (
             <p className="text-sm text-gray-500">Try searching for a topic to generate your report.</p>
           )}
         </div>
