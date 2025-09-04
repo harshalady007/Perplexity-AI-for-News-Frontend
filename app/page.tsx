@@ -66,6 +66,7 @@ export default function Home() {
       // 2) Timeline
       const timelineRes = await fetch(`${backendUrl}/timeline?topic=${encodedQuery}`);
       const timelineData = await timelineRes.json().catch(() => ({} as any));
+
       // backend returns: { timeline: "<json-string>" } OR { timeline: [...] } OR just [...]
       const parsedTimeline: TimelineItem[] = (() => {
         try {
@@ -165,17 +166,27 @@ export default function Home() {
             </div>
           )}
 
-          {timeline.length > 0 && (
+          {/* Show Timeline */}
+          {Array.isArray(timeline) && (timeline as TimelineItem[]).length > 0 && (
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Timeline</h2>
-              <ul className="space-y-2">
-                {timeline.map((item: TimelineItem, i) => (
-                  <li key={i} className="text-sm">
-                    <strong className="text-gray-300">{item.date}:</strong>
-                    <span className="ml-2 text-gray-400">{item.event}</span>
-                  </li>
-                ))}
-              </ul>
+
+              {/*
+                Create a typed local so TS never infers `never[]`
+              */}
+              {(() => {
+                const tl: TimelineItem[] = (timeline as TimelineItem[]) ?? [];
+                return (
+                  <ul className="space-y-2">
+                    {tl.map((item: TimelineItem, i: number) => (
+                      <li key={i} className="text-sm">
+                        <strong className="text-gray-300">{item.date}:</strong>
+                        <span className="ml-2 text-gray-400">{item.event}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
           )}
 
