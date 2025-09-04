@@ -15,10 +15,12 @@ type BiasMap = {
 
 function coerceTimeline(items: unknown): TimelineItem[] {
   if (!Array.isArray(items)) return [];
-  return items.map((x: any): TimelineItem => ({
-    date: String(x?.date ?? ''),
-    event: String(x?.event ?? ''),
-  })).filter(it => it.date !== '' || it.event !== '');
+  return items
+    .map((x: any): TimelineItem => ({
+      date: String(x?.date ?? ''),
+      event: String(x?.event ?? ''),
+    }))
+    .filter(it => it.date !== '' || it.event !== '');
 }
 
 export default function Home() {
@@ -64,18 +66,27 @@ export default function Home() {
       // 2) Timeline
       const timelineRes = await fetch(`${backendUrl}/timeline?topic=${encodedQuery}`);
       const timelineData = await timelineRes.json().catch(() => ({} as any));
-      // backend returns: { timeline: "<json-string>" }  OR similar
-      const parsed = (() => {
+      // backend returns: { timeline: "<json-string>" } OR { timeline: [...] } OR just [...]
+      const parsedTimeline: TimelineItem[] = (() => {
         try {
-          const raw = typeof timelineData?.timeline === 'string'
-            ? JSON.parse(timelineData.timeline)
-            : timelineData?.timeline; // support if backend already sends an object
-          return coerceTimeline(raw?.timeline ?? raw);
+          const rawTimelineContainer =
+            typeof timelineData?.timeline === 'string'
+              ? JSON.parse(timelineData.timeline)
+              : timelineData?.timeline ?? timelineData;
+
+          // Support shapes: { timeline: [...] } or [...]
+          const rawArray = Array.isArray(rawTimelineContainer?.timeline)
+            ? rawTimelineContainer.timeline
+            : Array.isArray(rawTimelineContainer)
+            ? rawTimelineContainer
+            : [];
+
+          return coerceTimeline(rawArray);
         } catch {
           return [] as TimelineItem[];
         }
       })();
-      setTimeline(parsed);
+      setTimeline(parsedTimeline);
 
       // 3) Bias Map
       const biasRes = await fetch(`${backendUrl}/bias?topic=${encodedQuery}`);
@@ -158,7 +169,7 @@ export default function Home() {
             <div className="bg-gray-800 p-6 rounded-lg animate-fade-in">
               <h2 className="text-2xl font-bold mb-3 text-gray-100">Timeline</h2>
               <ul className="space-y-2">
-                {timeline.map((item, i) => (
+                {timeline.map((item: TimelineItem, i) => (
                   <li key={i} className="text-sm">
                     <strong className="text-gray-300">{item.date}:</strong>
                     <span className="ml-2 text-gray-400">{item.event}</span>
